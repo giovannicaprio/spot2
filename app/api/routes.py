@@ -9,6 +9,7 @@ import re
 import time
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field
 from .schemas import ChatRequest, ChatResponse
 from ..services.chat_service import ChatService
 from ..core.llm import sanitize_input
@@ -19,6 +20,21 @@ from ..core.security import (
     validate_token,
     sanitize_html
 )
+
+# Error response model
+class ErrorResponse(BaseModel):
+    error: str = Field(..., description="Error message")
+    detail: Optional[str] = Field(None, description="Additional error details")
+    status_code: int = Field(..., description="HTTP status code")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "error": "Authentication failed",
+                "detail": "Invalid API key provided",
+                "status_code": 401
+            }
+        }
 
 # Configurar o logger
 log_dir = "logs"
@@ -210,4 +226,34 @@ async def health_check():
     """
     Endpoint para verificar a saúde da API.
     """
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()} 
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Custom exception handler for HTTPException.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=ErrorResponse(
+            error=exc.detail,
+            status_code=exc.status_code
+        ).dict()
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """
+    Custom exception handler for general exceptions.
+    """
+    logger.error(f"Unhandled exception: {str(exc)}")
+    logger.error(traceback.format_exc())
+    
+    return JSONResponse(
+        status_code=500,
+        content=ErrorResponse(
+            error="Internal server error",
+            detail=str(exc),
+            status_code=500
+        ).dict()
+    ) 

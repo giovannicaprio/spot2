@@ -58,18 +58,27 @@ FIELD_VALIDATION = {
     "budget": {
         "pattern": r'^\d+(\.\d{1,2})?$',
         "max_length": 10,
+        "min_value": 10000,
+        "max_value": 1000000000,
+        "description": "Budget in currency units (no currency symbol)"
     },
     "total_size": {
         "pattern": r'^\d+(\.\d{1,2})?$',
         "max_length": 10,
+        "min_value": 10,
+        "max_value": 10000,
+        "description": "Total size in square meters"
     },
     "property_type": {
         "pattern": r'^(apartment|house|commercial)$',
         "max_length": 20,
+        "allowed_values": ["apartment", "house", "commercial"],
+        "description": "Type of property"
     },
     "city": {
         "pattern": r'^[a-zA-Z\s\-\']+$',
         "max_length": 50,
+        "description": "City name"
     },
 }
 
@@ -160,6 +169,22 @@ def validate_field(field_name: str, value: str) -> Optional[str]:
         if len(value) > rules["max_length"]:
             logger.warning(f"Valor muito longo para o campo {field_name}: {value}")
             return value[:rules["max_length"]]
+        
+        # Verificar valores numéricos
+        if "min_value" in rules and "max_value" in rules:
+            try:
+                num_value = float(value)
+                if num_value < rules["min_value"] or num_value > rules["max_value"]:
+                    logger.warning(f"Valor fora do intervalo para o campo {field_name}: {value}")
+                    return None
+            except ValueError:
+                logger.warning(f"Valor não numérico para o campo {field_name}: {value}")
+                return None
+        
+        # Verificar valores permitidos
+        if "allowed_values" in rules and value.lower() not in rules["allowed_values"]:
+            logger.warning(f"Valor não permitido para o campo {field_name}: {value}")
+            return None
     
     # Para campos adicionais, aplicar regras genéricas
     elif field_name.startswith("additional_"):
