@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copiar apenas os arquivos necessários primeiro
+COPY requirements.txt .
+
+# Instalar dependências
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar o código da aplicação
+COPY frontend/ frontend/
+
+# Definir variável de ambiente padrão para o backend
+ENV BACKEND_URL=http://backend:8000
+
+# Expor a porta que a aplicação usa
+EXPOSE 8501
+
+# Comando para iniciar a aplicação
+CMD ["streamlit", "run", "frontend/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"] 

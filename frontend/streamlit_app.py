@@ -1,10 +1,11 @@
 import streamlit as st
 import requests
 import json
+import os
 from typing import List, Dict
 
 # Constants
-API_URL = "http://localhost:8000"
+API_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 API_KEY = "12345678901234567890123456789012"  # Replace with your actual API key
 
 def init_session_state():
@@ -47,7 +48,7 @@ def send_message(message: str) -> Dict:
             
         return response.json()
     except requests.exceptions.ConnectionError:
-        st.error("Could not connect to the server. Please make sure the backend server is running.")
+        st.error(f"Could not connect to the server at {API_URL}. Please make sure the backend server is running.")
         return None
     except Exception as e:
         st.error(f"An unexpected error occurred: {str(e)}")
@@ -61,6 +62,9 @@ def reset_conversation():
 
 def main():
     st.title("Spot2 Real Estate Assistant")
+    
+    # Display backend URL for debugging
+    st.sidebar.info(f"Backend URL: {API_URL}")
     
     # Initialize session state
     init_session_state()
