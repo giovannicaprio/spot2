@@ -1,0 +1,3 @@
+GOOGLE_API_KEY=xxxxxxxxxxxxxx
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB=real_estate
