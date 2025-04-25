@@ -82,13 +82,14 @@ def sanitize_input(text: str) -> str:
     logger.debug(f"Input sanitizado: {text[:50]}...")
     return text
 
-def get_llm_response(prompt: str, conversation_history: List[Dict[str, Any]] = None) -> str:
+def get_llm_response(prompt: str, conversation_history: List[Dict[str, Any]] = None, collected_fields: Dict[str, Any] = None) -> str:
     """
     Get response from Google's Gemini 1.5 Flash LLM.
     
     Args:
         prompt (str): The user's input message
-        conversation_history (list, optional): Previous conversation messages
+        conversation_history (List[Dict[str, Any]], optional): Previous conversation messages
+        collected_fields (Dict[str, Any], optional): Fields already collected from the conversation
         
     Returns:
         str: The LLM's response
@@ -131,6 +132,37 @@ def get_llm_response(prompt: str, conversation_history: List[Dict[str, Any]] = N
         IMPORTANT: Focus on helping users with their real estate needs. If asked about topics outside of real estate,
         politely redirect the conversation back to real estate matters.
         """
+        
+        # Add information about collected fields if available
+        if collected_fields:
+            fields_info = "\n\nIMPORTANT - COLLECTED INFORMATION:\n"
+            fields_info += "The following information has already been collected from the user:\n"
+            
+            # First list the required fields that have been collected
+            required_fields_collected = []
+            for field in ["budget", "total_size", "property_type", "city"]:
+                if field in collected_fields and collected_fields[field] is not None:
+                    required_fields_collected.append(field)
+                    fields_info += f"- {field}: {collected_fields[field]}\n"
+            
+            # Then list any additional fields
+            additional_fields = []
+            for field, value in collected_fields.items():
+                if field.startswith("additional_") and value is not None:
+                    additional_fields.append(field.replace("additional_", ""))
+                    fields_info += f"- {field.replace('additional_', '')}: {value}\n"
+            
+            # Add explicit instructions based on what's been collected
+            fields_info += "\nINSTRUCTIONS:\n"
+            if len(required_fields_collected) == 4:
+                fields_info += "ALL required fields have been collected. Focus on gathering any additional requirements or preferences the user might have.\n"
+            else:
+                missing_fields = [f for f in ["budget", "total_size", "property_type", "city"] if f not in required_fields_collected]
+                fields_info += f"STILL NEED TO COLLECT: {', '.join(missing_fields)}. Focus on asking for these missing fields.\n"
+            
+            fields_info += "DO NOT ask for information that has already been provided. If the user provides new information, acknowledge it and update your understanding.\n"
+            
+            system_message += fields_info
         
         # Send the system message as the first message
         logger.debug("Enviando mensagem do sistema")

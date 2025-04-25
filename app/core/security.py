@@ -58,7 +58,7 @@ FIELD_VALIDATION = {
     "budget": {
         "pattern": r'^\d+(\.\d{1,2})?$',
         "max_length": 10,
-        "min_value": 10000,
+        "min_value": 100,
         "max_value": 1000000000,
         "description": "Budget in currency units (no currency symbol)"
     },
@@ -66,19 +66,29 @@ FIELD_VALIDATION = {
         "pattern": r'^\d+(\.\d{1,2})?$',
         "max_length": 10,
         "min_value": 10,
-        "max_value": 10000,
+        "max_value": 1000000,
         "description": "Total size in square meters"
     },
     "property_type": {
-        "pattern": r'^(apartment|house|commercial)$',
-        "max_length": 20,
-        "allowed_values": ["apartment", "house", "commercial"],
+        "pattern": r'^[a-zA-Z\s-]{2,50}$',
+        "max_length": 50,
+        "allowed_values": [
+            # English values
+            "warehouse", "office", "store", "commercial", "industrial",
+            # Spanish values
+            "almacen", "oficina", "tienda", "comercial", "industrial",
+            # Portuguese values (for backward compatibility)
+            "galpao", "escritorio", "loja", "comercial", "industrial"
+        ],
         "description": "Type of property"
     },
     "city": {
-        "pattern": r'^[a-zA-Z\s\-\']+$',
-        "max_length": 50,
-        "description": "City name"
+        "pattern": r'^[A-Za-zÀ-ú\s-]{2,100}$',
+        "max_length": 100,
+        "min_words": 1,
+        "max_words": 3,
+        "description": "City name",
+        "disallowed_words": ["the", "and", "or", "but", "with", "for", "that", "this", "these", "those", "meet", "need", "want", "look", "search", "find"]
     },
 }
 
@@ -154,7 +164,7 @@ def validate_field(field_name: str, value: str) -> Optional[str]:
         Optional[str]: O valor validado ou None se inválido
     """
     if not value:
-        return value
+        return None
         
     # Verificar se o campo tem regras de validação
     if field_name in FIELD_VALIDATION:
@@ -185,12 +195,31 @@ def validate_field(field_name: str, value: str) -> Optional[str]:
         if "allowed_values" in rules and value.lower() not in rules["allowed_values"]:
             logger.warning(f"Valor não permitido para o campo {field_name}: {value}")
             return None
+            
+        # Verificar número de palavras (para campos como city)
+        if "min_words" in rules and "max_words" in rules:
+            words = value.split()
+            if len(words) < rules["min_words"] or len(words) > rules["max_words"]:
+                logger.warning(f"Número inválido de palavras para o campo {field_name}: {value}")
+                return None
+                
+        # Verificar palavras não permitidas
+        if "disallowed_words" in rules:
+            words = value.lower().split()
+            if any(word in rules["disallowed_words"] for word in words):
+                logger.warning(f"Palavras não permitidas encontradas no campo {field_name}: {value}")
+                return None
     
     # Para campos adicionais, aplicar regras genéricas
     elif field_name.startswith("additional_"):
         if len(value) > MAX_FIELD_LENGTH:
             logger.warning(f"Valor muito longo para o campo adicional {field_name}: {value}")
             return value[:MAX_FIELD_LENGTH]
+            
+        # Skip additional fields that look like sentences or fragments
+        if len(value.split()) > 5 or any(word in value.lower() for word in ["the", "and", "or", "but", "with"]):
+            logger.warning(f"Campo adicional {field_name} parece uma frase: {value}")
+            return None
     
     # Verificar se o valor contém conteúdo perigoso
     if check_for_dangerous_content(value):

@@ -6,3 +6,4 @@ python-dotenv==1.0.1
 python-multipart==0.0.9
 google-generativeai==0.8.4
 pydantic_settings==2.0.2
+requests==2.31.0
