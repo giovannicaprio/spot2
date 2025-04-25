@@ -13,6 +13,8 @@ from ..core.security import (
     validate_json_schema
 )
 from ..api.schemas import ChatMessage, RealEstateRequirements
+from ..services.mongodb_service import MongoDBService
+import uuid
 
 # Configurar o logger
 log_dir = "logs"
@@ -64,10 +66,12 @@ class ChatService:
             "city": None
         }
         self.additional_fields = {}
+        self.mongodb_service = MongoDBService()
+        self.conversation_id = str(uuid.uuid4())
         
         # Patterns for field extraction
         self.patterns = {
-            "budget": r"(?:budget|price|cost|\$|USD|EUR|€|£|R\$)\s*(?:is|:)?\s*(\d+(?:\.|,)\d+|\d+)\s*(?:per month|monthly|/month|al mes|por mes)?",
+            "budget": r"(?:budget|price|cost|\$|USD|EUR|€|£|R\$)\s*(?:is|:)?\s*(\d+(?:\.|,)\d+|\d+)",
             "total_size": r"(?:size|area|space|square meters|square feet|sq ft|m²|metros?)\s*(?:of|is|:)?\s*(?:at least|minimum|approximately|about|al menos|mínimo|aproximadamente)?\s*(\d+(?:\.|,)\d+|\d+)",
             "property_type": r"(?:looking for|need|want|searching for|busco|necesito|quiero)\s+(?:a|an|el|la|un|una)?\s*([a-zA-ZÀ-ú\s-]+?)(?:\s+(?:to|with|that|for|para|con|que|in|\.|\n|$))",
             "city": r"(?:in|at|near|en|cerca de|próximo a)\s+([A-Za-zÀ-ú\s-]+?)(?:\s*(?:,|\.|$|\s+(?:preferably|specifically|zone|area|región|zona|área|area)))"
@@ -102,6 +106,8 @@ class ChatService:
                 elif field == "property_type":
                     # Clean up property type and normalize to English
                     value = value.strip().lower()
+                    # Remove any trailing words
+                    value = re.sub(r'\s+(?:in|at|near|with|that|for|to).*$', '', value)
                     # Normalize common variations
                     if any(term in value for term in ["warehouse", "galpão", "galpao", "almacén", "almacen", "storage"]):
                         value = "warehouse"
@@ -111,6 +117,8 @@ class ChatService:
                         value = "store"
                     elif any(term in value for term in ["industrial", "factory", "manufacturing"]):
                         value = "industrial"
+                    elif any(term in value for term in ["apartment", "apartamento", "flat"]):
+                        value = "apartment"
                 elif field == "city":
                     # Clean up city name and handle common formats
                     value = value.strip().title()
@@ -213,10 +221,22 @@ class ChatService:
             if not validate_json_schema(collected_fields, FIELD_SCHEMA):
                 logger.warning("Campos coletados não passaram na validação do schema")
             
+            # Salvar informações coletadas no MongoDB
+            try:
+                collected_info = {
+                    **collected_fields,
+                    "conversation_id": self.conversation_id
+                }
+                self.mongodb_service.save_collected_info(collected_info)
+                logger.info("Informações coletadas salvas no MongoDB")
+            except Exception as e:
+                logger.error(f"Erro ao salvar informações no MongoDB: {str(e)}")
+            
             result = {
                 "response": llm_response,
                 "collected_fields": collected_fields,
-                "is_complete": is_complete
+                "is_complete": is_complete,
+                "conversation_id": self.conversation_id
             }
             
             logger.info("Processamento de mensagem concluído com sucesso")
@@ -232,4 +252,5 @@ class ChatService:
         logger.info("Resetando estado da conversa")
         self.required_fields = {field: None for field in self.required_fields}
         self.additional_fields = {}
+        self.conversation_id = str(uuid.uuid4())
         logger.info("Estado da conversa resetado com sucesso") 

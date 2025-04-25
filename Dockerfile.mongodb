@@ -1,0 +1,13 @@
+FROM mongo:6.0
+
+# Criar diretório para dados
+RUN mkdir -p /data/db
+
+# Configurar permissões
+RUN chown -R mongodb:mongodb /data/db
+
+# Expor a porta padrão do MongoDB
+EXPOSE 27017
+
+# Comando para iniciar o MongoDB
+CMD ["mongod", "--bind_ip_all"] 

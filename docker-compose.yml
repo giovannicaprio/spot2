@@ -9,11 +9,15 @@ services:
       - "8000:8000"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - MONGODB_URI=mongodb://admin:password123@mongodb:27017/admin?authSource=admin
+      - MONGO_DB_NAME=spotify_clone
     volumes:
       - ./logs:/app/logs
     restart: unless-stopped
     networks:
       - spot2-network
+    depends_on:
+      - mongodb
 
   frontend:
     build:
@@ -30,6 +34,26 @@ services:
     networks:
       - spot2-network
 
+  mongodb:
+    build:
+      context: .
+      dockerfile: Dockerfile.mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password123
+    command: mongod --bind_ip_all
+    restart: unless-stopped
+    networks:
+      - spot2-network
+
 networks:
   spot2-network:
-    driver: bridge 
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local 

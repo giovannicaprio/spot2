@@ -30,6 +30,7 @@ class ChatResponse(BaseModel):
         description="Fields collected from the conversation (budget, total_size, property_type, city, etc.)"
     )
     is_complete: bool = Field(..., description="Whether all required fields have been collected")
+    conversation_id: str = Field(..., description="Unique identifier for the conversation")
     
     class Config:
         schema_extra = {
@@ -41,7 +42,8 @@ class ChatResponse(BaseModel):
                     "city": "New York",
                     "total_size": None
                 },
-                "is_complete": False
+                "is_complete": False,
+                "conversation_id": "550e8400-e29b-41d4-a716-446655440000"
             }
         }
 

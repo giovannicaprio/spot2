@@ -221,13 +221,6 @@ async def reset_conversation(api_key: str = Depends(get_api_key)):
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/health")
-async def health_check():
-    """
-    Endpoint para verificar a saúde da API.
-    """
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """
