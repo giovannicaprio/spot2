@@ -13,6 +13,7 @@ from ..core.security import (
     validate_json_schema
 )
 from ..api.schemas import ChatMessage, RealEstateRequirements
+from pydantic import create_model
 
 # Configurar o logger
 log_dir = "logs"
@@ -56,83 +57,106 @@ FIELD_SCHEMA = {
 
 class ChatService:
     def __init__(self):
-        logger.info("Inicializando ChatService")
+        """Initialize the ChatService with required fields and patterns."""
         self.required_fields = {
             "budget": None,
             "total_size": None,
             "property_type": None,
             "city": None
         }
+        
         self.additional_fields = {}
         
-        # Patterns for field extraction
+        # Regex patterns for required fields
         self.patterns = {
-            "budget": r"(?:budget|price|cost|\$|USD|EUR|€|£|R\$)\s*(?:is|:)?\s*(\d+(?:\.|,)\d+|\d+)\s*(?:per month|monthly|/month|al mes|por mes)?",
-            "total_size": r"(?:size|area|space|square meters|square feet|sq ft|m²|metros?)\s*(?:of|is|:)?\s*(?:at least|minimum|approximately|about|al menos|mínimo|aproximadamente)?\s*(\d+(?:\.|,)\d+|\d+)",
-            "property_type": r"(?:looking for|need|want|searching for|busco|necesito|quiero)\s+(?:a|an|el|la|un|una)?\s*([a-zA-ZÀ-ú\s-]+?)(?:\s+(?:to|with|that|for|para|con|que|in|\.|\n|$))",
-            "city": r"(?:in|at|near|en|cerca de|próximo a)\s+([A-Za-zÀ-ú\s-]+?)(?:\s*(?:,|\.|$|\s+(?:preferably|specifically|zone|area|región|zona|área|area)))"
+            "budget": [
+                r"budget.*?(\d+(?:,\d{3})*(?:\.\d{2})?)",
+                r"(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:per month|monthly|/month)",
+                r"up to\s*(\d+(?:,\d{3})*(?:\.\d{2})?)",
+                r"maximum.*?(\d+(?:,\d{3})*(?:\.\d{2})?)"
+            ],
+            "total_size": [
+                r"(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:square\s*(?:meters?|m²|feet?|ft²)|m²|ft²)",
+                r"(?:size|space).*?(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:square\s*(?:meters?|m²|feet?|ft²)|m²|ft²)",
+                r"at\s*least\s*(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:square\s*(?:meters?|m²|feet?|ft²)|m²|ft²)"
+            ],
+            "property_type": [
+                r"(?:looking\s*for|need|want)\s*(?:a|an)?\s*(\w+(?:\s+\w+)*)\s*(?:to\s*rent|for\s*rent)",
+                r"rent\s*(?:a|an)?\s*(\w+(?:\s+\w+)*)",
+                r"(\w+(?:\s+\w+)*)\s*(?:property|space|building)"
+            ],
+            "city": [
+                r"(?:in|at|near)\s*([A-Za-z\s]+(?:City)?)",
+                r"looking\s*in\s*([A-Za-z\s]+(?:City)?)",
+                r"interested\s*in\s*([A-Za-z\s]+(?:City)?)"
+            ]
         }
+        
+        # Initialize schema for validation
+        self.schema = create_model(
+            "PropertyRequirements",
+            budget=(Optional[str], None),
+            total_size=(Optional[str], None),
+            property_type=(Optional[str], None),
+            city=(Optional[str], None)
+        )
+        
+        # Initialize LLM service
+        self.llm = LLMService()
+        
         logger.info("ChatService initialized successfully")
     
-    def extract_fields(self, text: str) -> Dict[str, str]:
+    def extract_fields(self, message: str) -> Dict[str, str]:
         """
-        Extract fields from text using regex patterns.
+        Extract fields from a message using regex patterns.
         
         Args:
-            text (str): Text to extract fields from
+            message (str): The message to extract fields from
             
         Returns:
-            Dict[str, str]: Dictionary of extracted fields
+            Dict[str, str]: The extracted fields
         """
-        logger.debug(f"Extracting fields from text: {text[:50]}...")
         extracted_fields = {}
         
         # Extract required fields
-        for field, pattern in self.patterns.items():
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                value = match.group(1).strip()
-                # Clean up the extracted value
-                if field == "budget":
-                    # Remove currency symbols and normalize
-                    value = re.sub(r'[^\d.]', '', value)
-                elif field == "total_size":
-                    # Remove units and normalize
-                    value = re.sub(r'[^\d.]', '', value)
-                elif field == "property_type":
-                    # Clean up property type and normalize to English
-                    value = value.strip().lower()
-                    # Normalize common variations
-                    if any(term in value for term in ["warehouse", "galpão", "galpao", "almacén", "almacen", "storage"]):
-                        value = "warehouse"
-                    elif any(term in value for term in ["office", "escritório", "escritorio", "oficina"]):
-                        value = "office"
-                    elif any(term in value for term in ["store", "loja", "tienda", "retail"]):
-                        value = "store"
-                    elif any(term in value for term in ["industrial", "factory", "manufacturing"]):
-                        value = "industrial"
-                elif field == "city":
-                    # Clean up city name and handle common formats
-                    value = value.strip().title()
-                    # Remove common suffixes in multiple languages
-                    value = re.sub(r'\s+(?:zone|area|región|zona|área|area).*$', '', value, flags=re.IGNORECASE)
-                    
-                    # Skip if the value looks like a sentence fragment
-                    if len(value.split()) > 3 or any(word.lower() in value.lower() for word in ["the", "and", "or", "but", "with", "for", "that", "this", "these", "those", "meet", "need", "want", "look", "search", "find"]):
-                        continue
-                
-                # Validate the field value
-                validated_value = validate_field(field, value)
-                if validated_value is not None:
-                    # Only update if the new value is valid and either:
-                    # 1. The field doesn't exist yet, or
-                    # 2. The new value is more specific/complete than the existing one
-                    if (field not in extracted_fields or 
-                        len(validated_value) > len(extracted_fields[field]) or
-                        (field == "city" and "Mexico City" in validated_value)):
-                        extracted_fields[field] = validated_value
-                        logger.debug(f"Field extracted: {field} = {validated_value}")
+        for field, patterns in self.patterns.items():
+            for pattern in patterns:
+                match = re.search(pattern, message, re.IGNORECASE)
+                if match:
+                    extracted_fields[field] = match.group(1)
+                    logger.debug(f"Campo extraído: {field} = {match.group(1)}")
+                    break
         
+        # Additional field patterns with improved regex
+        additional_patterns = {
+            "additional_parking": r"(?:must\s+have|with|need|requires?)\s+(?:a\s+)?parking(?:\s+lot)?",
+            "additional_bathrooms": r"(?:with|has|have|need)\s+(\d+)\s+bath(?:room)?s?",
+            "additional_pet_friendly": r"(?:must\s+be\s+)?pet[\s-]friendly",
+            "additional_furnished": r"(?:must\s+be\s+)?furnished",
+            "additional_location": r"(?:in|at|near)\s+the\s+(\w+(?:\s+\w+)*)\s+(?:zone|area|district)",
+            "additional_bedrooms": r"(?:with|has|have|need)\s+(\d+)\s+bed(?:room)?s?",
+            "additional_amenities": r"(?:with|include|has|have)\s+(\w+(?:\s+\w+)*)\s+(?:amenities|facilities)"
+        }
+        
+        # Extract additional fields with improved handling
+        for field, pattern in additional_patterns.items():
+            match = re.search(pattern, message, re.IGNORECASE)
+            if match:
+                if len(match.groups()) > 0:
+                    # For fields that capture a value (like number of bathrooms)
+                    value = match.group(1)
+                    # Try to convert numeric values
+                    try:
+                        if field in ["additional_bathrooms", "additional_bedrooms"]:
+                            value = int(value)
+                    except (ValueError, TypeError):
+                        continue
+                else:
+                    # For boolean fields (like pet-friendly)
+                    value = True
+                
+                extracted_fields[field] = value
+                logger.debug(f"Campo adicional extraído: {field} = {value}")
         
         logger.info(f"Total de campos extraídos: {len(extracted_fields)}")
         return extracted_fields
@@ -155,77 +179,87 @@ class ChatService:
         # Update additional fields
         for field, value in extracted_fields.items():
             if field.startswith("additional_"):
-                self.additional_fields[field] = value
-                logger.debug(f"Campo adicional atualizado: {field} = {value}")
+                # Clean up the field name and value
+                clean_field = field.replace("additional_", "")
+                clean_value = value.strip() if isinstance(value, str) else value
+                
+                # Special handling for boolean fields
+                if clean_field in ["parking", "pet_friendly", "furnished"]:
+                    clean_value = True
+                
+                # Special handling for numeric fields
+                elif clean_field in ["bathrooms", "bedrooms"]:
+                    try:
+                        clean_value = int(clean_value)
+                    except (ValueError, TypeError):
+                        clean_value = None
+                
+                # Store the cleaned field and value
+                if clean_value is not None:
+                    self.additional_fields[clean_field] = clean_value
+                    logger.debug(f"Campo adicional atualizado: {clean_field} = {clean_value}")
     
     def process_message(self, message: str, conversation_history: Optional[List[ChatMessage]] = None) -> Dict:
         """
-        Process a user message and return the response with collected fields.
+        Process a user message and return a response.
         
         Args:
             message (str): The user's message
-            conversation_history (List[ChatMessage], optional): Previous conversation messages
+            conversation_history (Optional[List[ChatMessage]]): The conversation history
             
         Returns:
-            Dict: Contains response, collected fields, and completion status
+            Dict: The response containing the assistant's message and collected fields
         """
-        logger.info(f"Processando mensagem: {message[:50]}...")
+        # Sanitize the message
+        sanitized_message = self._sanitize_input(message)
+        if sanitized_message != message:
+            logger.warning(f"Potential attack detected. Original message: {message}")
         
+        # Extract fields from the message
+        extracted_fields = self.extract_fields(sanitized_message)
+        logger.info(f"Extracted {len(extracted_fields)} fields from message")
+        
+        # Update fields with extracted values
+        self.update_fields(extracted_fields)
+        
+        # Get response from LLM
+        response = self.llm.get_response(
+            message=sanitized_message,
+            conversation_history=conversation_history,
+            collected_fields=self.required_fields,
+            additional_fields=self.additional_fields
+        )
+        
+        # Validate collected fields
         try:
-            # Sanitize the user's message
-            sanitized_message = sanitize_input(message)
-            
-            # Sanitizar HTML na mensagem
-            sanitized_message = sanitize_html(sanitized_message)
-            
-            # Registrar tentativa de ataque se a mensagem foi modificada
-            if sanitized_message != message:
-                logger.warning(f"Tentativa de ataque detectada. Mensagem original: {message[:100]}...")
-                logger.warning(f"Mensagem sanitizada: {sanitized_message[:100]}...")
-            
-            # Extract fields from user message
-            logger.debug("Extraindo campos da mensagem do usuário")
-            extracted_fields = self.extract_fields(sanitized_message)
-            
-            # Update fields with extracted values
-            logger.debug("Atualizando campos com valores extraídos")
-            self.update_fields(extracted_fields)
-            
-            # Get LLM response with collected fields
-            logger.debug("Obtendo resposta do LLM")
-            collected_fields = {**self.required_fields, **self.additional_fields}
-            llm_response = get_llm_response(sanitized_message, conversation_history, collected_fields)
-            
-            # Extract fields from LLM response
-            logger.debug("Extraindo campos da resposta do LLM")
-            extracted_fields.update(self.extract_fields(llm_response))
-            
-            # Update fields with extracted values from LLM response
-            logger.debug("Atualizando campos com valores extraídos da resposta do LLM")
-            self.update_fields(extracted_fields)
-            
-            # Check if all required fields are collected
-            is_complete = all(value is not None for value in self.required_fields.values())
-            logger.info(f"Todos os campos obrigatórios coletados: {is_complete}")
-            
-            # Validar campos coletados contra o schema
-            collected_fields = {**self.required_fields, **self.additional_fields}
-            if not validate_json_schema(collected_fields, FIELD_SCHEMA):
-                logger.warning("Campos coletados não passaram na validação do schema")
-            
-            result = {
-                "response": llm_response,
-                "collected_fields": collected_fields,
-                "is_complete": is_complete
-            }
-            
-            logger.info("Processamento de mensagem concluído com sucesso")
-            return result
-            
-        except Exception as e:
-            logger.error(f"Erro ao processar mensagem: {str(e)}")
-            logger.error(traceback.format_exc())
-            raise
+            self.schema(**self.required_fields)
+            is_complete = True
+        except ValidationError:
+            is_complete = False
+        
+        # Clean up additional fields for display
+        display_additional_fields = {}
+        for field, value in self.additional_fields.items():
+            # Format boolean values
+            if isinstance(value, bool):
+                display_additional_fields[field] = "Yes"
+            # Format numeric values
+            elif isinstance(value, (int, float)):
+                display_additional_fields[field] = str(value)
+            # Format string values
+            else:
+                display_additional_fields[field] = value
+        
+        # Prepare the result
+        result = {
+            "response": response,
+            "collected_fields": self.required_fields,
+            "is_complete": is_complete,
+            "additional_fields": display_additional_fields
+        }
+        
+        logger.info(f"Processed message. Fields collected: {len(self.required_fields)}")
+        return result
     
     def reset(self):
         """Reset the conversation state."""

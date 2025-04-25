@@ -27,19 +27,28 @@ class ChatResponse(BaseModel):
     response: str = Field(..., description="The assistant's response to the user")
     collected_fields: Dict[str, Optional[str]] = Field(
         ..., 
-        description="Fields collected from the conversation (budget, total_size, property_type, city, etc.)"
+        description="Required fields collected from the conversation (budget, total_size, property_type, city)"
+    )
+    additional_fields: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Additional fields collected from the conversation (parking, bedrooms, bathrooms, etc.)"
     )
     is_complete: bool = Field(..., description="Whether all required fields have been collected")
     
     class Config:
         schema_extra = {
             "example": {
-                "response": "I understand you're looking for an apartment in New York with a budget of $500,000. What size are you looking for?",
+                "response": "I understand you're looking for an apartment in New York with a budget of $500,000 and you need parking. What size are you looking for?",
                 "collected_fields": {
                     "budget": "500000",
                     "property_type": "apartment",
                     "city": "New York",
                     "total_size": None
+                },
+                "additional_fields": {
+                    "additional_parking": "yes",
+                    "additional_bedrooms": "2",
+                    "additional_bathrooms": "1"
                 },
                 "is_complete": False
             }

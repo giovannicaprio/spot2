@@ -86,8 +86,10 @@ def main():
         "I need a space of at least 60 square meters",
         "My budget is $15,000 per month",
         "I'm looking in Mexico City, preferably in the city center zone",
-        "Add that it must have parking lot"
-
+        "Add that it must have parking lot",
+        "It should be pet friendly and have 2 bathrooms",
+        "The property must be furnished", 
+        "List the additional requirments that I asked for"
     ]
     
     # Enviar cada mensagem e exibir os campos coletados
@@ -96,9 +98,31 @@ def main():
         response = bot.send_message(message)
         
         if response:
-            print(f"Assistant: {response['response']}")
-            print(f"Collected fields: {response['collected_fields']}")
-            print(f"Conversation complete: {response['is_complete']}")
+            print(f"Assistant: {response['response']}\n")
+            print("Collected Information:")
+            
+            # Display required fields
+            print("\nRequired Fields:")
+            for field, value in response['collected_fields'].items():
+                formatted_field = field.replace('_', ' ').title()
+                formatted_value = value if value else 'Not specified'
+                print(f"  - {formatted_field}: {formatted_value}")
+            
+            # Display additional fields if present
+            if response.get('additional_fields'):
+                print("\nAdditional Requirements:")
+                for field, value in response['additional_fields'].items():
+                    formatted_field = field.replace('_', ' ').title()
+                    if field in ['parking', 'pet_friendly', 'furnished']:
+                        print(f"  - {formatted_field}: Required")
+                    elif field in ['bathrooms', 'bedrooms']:
+                        print(f"  - {formatted_field}: {value}")
+                    elif field == 'location':
+                        print(f"  - Preferred Location: {value}")
+                    else:
+                        print(f"  - {formatted_field}: {value}")
+            
+            print(f"\nConversation Status: {'Complete' if response['is_complete'] else 'Incomplete'}")
         else:
             print(f"Error sending message: {message}")
         
