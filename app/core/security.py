@@ -56,34 +56,34 @@ MIN_TOKEN_LENGTH = 32  # Minimum length for API tokens
 # Configurações de validação de campos
 FIELD_VALIDATION = {
     "budget": {
-        "pattern": r'^\d+(\.\d{1,2})?$',
+        "pattern": r'^\d+(?:\.\d+)?$',
         "max_length": 10,
         "min_value": 100,
         "max_value": 1000000000,
         "description": "Budget in currency units (no currency symbol)"
     },
     "total_size": {
-        "pattern": r'^\d+(\.\d{1,2})?$',
+        "pattern": r'^\d+(?:\.\d+)?$',
         "max_length": 10,
         "min_value": 10,
         "max_value": 1000000,
         "description": "Total size in square meters"
     },
     "property_type": {
-        "pattern": r'^[a-zA-Z\s-]{2,50}$',
+        "pattern": r'^[a-zA-Z\s-]+$',
         "max_length": 50,
         "allowed_values": [
             # English values
-            "warehouse", "office", "store", "commercial", "industrial",
+            "warehouse", "office", "store", "commercial", "industrial", "apartment",
             # Spanish values
-            "almacen", "oficina", "tienda", "comercial", "industrial",
+            "almacen", "oficina", "tienda", "comercial", "industrial", "apartamento",
             # Portuguese values (for backward compatibility)
-            "galpao", "escritorio", "loja", "comercial", "industrial"
+            "galpao", "escritorio", "loja", "comercial", "industrial", "apartamento"
         ],
         "description": "Type of property"
     },
     "city": {
-        "pattern": r'^[A-Za-zÀ-ú\s-]{2,100}$',
+        "pattern": r'^[A-Za-zÀ-ú\s-]+$',
         "max_length": 100,
         "min_words": 1,
         "max_words": 3,

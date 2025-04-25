@@ -1,19 +1,21 @@
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 
-# Copiar apenas os arquivos necessários primeiro
-COPY requirements.txt .
+# Copy requirements files
+COPY requirements.txt requirements-test.txt ./
 
-# Instalar dependências
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies including test dependencies
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-test.txt
 
-# Copiar o código da aplicação
-COPY app/ app/
-COPY main.py .
+# Copy application code
+COPY . .
 
-# Expor a porta que a aplicação usa
+# Create logs directory
+RUN mkdir -p logs
+
+# Expose the port the app runs on
 EXPOSE 8000
 
-# Comando para iniciar a aplicação
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# Command to run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"] 
